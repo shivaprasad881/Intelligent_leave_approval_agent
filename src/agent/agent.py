@@ -118,7 +118,7 @@ STYLE
 - Be concise and factual. Show the employee name and leave request ID the
   user will need.
 """
-
+  
 
 # ---------------------------------------------------------------------------
 # 3) Assemble the agent: Gemini + RAG tool + MCP tools + memory

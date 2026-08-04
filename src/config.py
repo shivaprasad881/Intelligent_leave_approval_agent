@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     agent_model: str = "gpt-4.1-mini"
     max_tokens: int = 2048
-    temperature: float = 0.1          # low temp: business answers should be stable
+    temperature: float = 0.1          # low temp: business answers should be stable 
 
     # --- RAG ---
     chroma_dir: str = str(PROJECT_ROOT / "storage" / "chroma")

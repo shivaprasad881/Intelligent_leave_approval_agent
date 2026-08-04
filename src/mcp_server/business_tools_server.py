@@ -10,8 +10,6 @@ Why MCP instead of hard-coding LangChain tools?
   * Governance  — every tool call crosses a single auditable boundary.
 
 Tools exposed:
-  lookup_customer, get_customer_count, get_customer_orders,
-  create_support_ticket, update_ticket_status, check_inventory, get_sales_summary,
   lookup_employee, get_employee_count, get_leave_balance,
   list_employee_leave_requests, create_leave_request,
   update_leave_request_status, get_department_summary
@@ -42,146 +40,6 @@ def _rows_to_json(rows) -> str:
     return json.dumps([dict(r) for r in rows], indent=2, default=str)
 
 
-# ---------------------------------------------------------------------------
-# CRM tools
-# ---------------------------------------------------------------------------
-@mcp.tool()
-def lookup_customer(email: str = "", customer_id: int = 0) -> str:
-    """Find a customer by email address OR numeric customer ID.
-
-    Returns the customer profile (id, name, email, tier, signup date,
-    lifetime value) as JSON, or an error message if not found.
-    """
-    with _db() as conn:
-        if email:
-            rows = conn.execute(
-                "SELECT * FROM customers WHERE lower(email) = lower(?)", (email,)
-            ).fetchall()
-        elif customer_id:
-            rows = conn.execute(
-                "SELECT * FROM customers WHERE id = ?", (customer_id,)
-            ).fetchall()
-        else:
-            return "ERROR: provide either email or customer_id."
-    return _rows_to_json(rows) if rows else "NOT_FOUND: no matching customer."
-
-
-@mcp.tool()
-def get_customer_count(tier: str = "") -> str:
-    """Return the number of customers in the business database.
-
-    Optionally provide a customer tier such as gold, silver, or bronze to
-    count only customers in that tier. The result is returned as JSON.
-    """
-    with _db() as conn:
-        if tier:
-            row = conn.execute(
-                """SELECT COUNT(*) AS customer_count
-                   FROM customers
-                   WHERE lower(tier) = lower(?)""",
-                (tier,),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT COUNT(*) AS customer_count FROM customers"
-            ).fetchone()
-
-    return _rows_to_json([row])
-
-
-@mcp.tool()
-def get_customer_orders(customer_id: int, limit: int = 10) -> str:
-    """List a customer's most recent orders (id, date, status, total, items)."""
-    with _db() as conn:
-        rows = conn.execute(
-            """SELECT o.id, o.order_date, o.status, o.total_usd, o.items
-               FROM orders o WHERE o.customer_id = ?
-               ORDER BY o.order_date DESC LIMIT ?""",
-            (customer_id, limit),
-        ).fetchall()
-    return _rows_to_json(rows) if rows else "NOT_FOUND: customer has no orders."
-
-
-# ---------------------------------------------------------------------------
-# Support / ticketing tools  (write operations!)
-# ---------------------------------------------------------------------------
-@mcp.tool()
-def create_support_ticket(customer_id: int, subject: str, description: str,
-                          priority: str = "normal") -> str:
-    """Open a support ticket for a customer.
-
-    priority must be one of: low, normal, high, urgent.
-    Returns the created ticket as JSON including its new ticket ID.
-    """
-    if priority not in {"low", "normal", "high", "urgent"}:
-        return "ERROR: priority must be low|normal|high|urgent."
-    now = datetime.now(timezone.utc).isoformat()
-    with _db() as conn:
-        cur = conn.execute(
-            """INSERT INTO tickets (customer_id, subject, description,
-                                    priority, status, created_at)
-               VALUES (?, ?, ?, ?, 'open', ?)""",
-            (customer_id, subject, description, priority, now),
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM tickets WHERE id = ?",
-                           (cur.lastrowid,)).fetchone()
-    return _rows_to_json([row])
-
-
-@mcp.tool()
-def update_ticket_status(ticket_id: int, status: str, note: str = "") -> str:
-    """Change a ticket's status. Allowed: open, in_progress, resolved, closed."""
-    if status not in {"open", "in_progress", "resolved", "closed"}:
-        return "ERROR: invalid status."
-    with _db() as conn:
-        cur = conn.execute(
-            "UPDATE tickets SET status = ?, last_note = ? WHERE id = ?",
-            (status, note, ticket_id),
-        )
-        conn.commit()
-        if cur.rowcount == 0:
-            return f"NOT_FOUND: ticket {ticket_id} does not exist."
-        row = conn.execute("SELECT * FROM tickets WHERE id = ?",
-                           (ticket_id,)).fetchone()
-    return _rows_to_json([row])
-
-
-# ---------------------------------------------------------------------------
-# Inventory & analytics tools
-# ---------------------------------------------------------------------------
-@mcp.tool()
-def check_inventory(sku: str = "", product_name: str = "") -> str:
-    """Check stock for a product by exact SKU or fuzzy product name."""
-    with _db() as conn:
-        if sku:
-            rows = conn.execute(
-                "SELECT * FROM inventory WHERE sku = ?", (sku,)
-            ).fetchall()
-        elif product_name:
-            rows = conn.execute(
-                "SELECT * FROM inventory WHERE product_name LIKE ?",
-                (f"%{product_name}%",),
-            ).fetchall()
-        else:
-            return "ERROR: provide sku or product_name."
-    return _rows_to_json(rows) if rows else "NOT_FOUND: no matching product."
-
-
-@mcp.tool()
-def get_sales_summary(days: int = 30) -> str:
-    """Aggregate sales for the last N days: order count, revenue, top status mix."""
-    with _db() as conn:
-        row = conn.execute(
-            """SELECT COUNT(*) AS orders,
-                      ROUND(COALESCE(SUM(total_usd), 0), 2) AS revenue_usd,
-                      ROUND(COALESCE(AVG(total_usd), 0), 2) AS avg_order_usd
-               FROM orders
-               WHERE order_date >= date('now', ?)""",
-            (f"-{days} days",),
-        ).fetchone()
-    return _rows_to_json([row])
-
 
 # ---------------------------------------------------------------------------
 # HR / employee tools
@@ -189,7 +47,8 @@ def get_sales_summary(days: int = 30) -> str:
 @mcp.tool()
 def lookup_employee(employee_id: int = 0, employee_code: str = "",
                     email: str = "", name: str = "") -> str:
-    """Find an employee by ID, employee code, email, or partial name."""
+    """Find EXACTLY ONE employee by ID, employee code, email, or exact name.
+Do not call this in a loop or for bulk/list lookups — not supported."""
     with _db() as conn:
         if employee_id:
             rows = conn.execute(

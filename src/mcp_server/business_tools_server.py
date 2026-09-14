@@ -74,25 +74,6 @@ Do not call this in a loop or for bulk/list lookups — not supported."""
 
 
 @mcp.tool()
-def get_employee_count(department: str = "", status: str = "active") -> str:
-    """Count employees, optionally filtered by department and employment status."""
-    clauses = []
-    params: list[str] = []
-    if department:
-        clauses.append("lower(department) = lower(?)")
-        params.append(department)
-    if status:
-        clauses.append("lower(status) = lower(?)")
-        params.append(status)
-    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-    with _db() as conn:
-        row = conn.execute(
-            f"SELECT COUNT(*) AS employee_count FROM employees{where}", params
-        ).fetchone()
-    return _rows_to_json([row])
-
-
-@mcp.tool()
 def get_leave_balance(employee_id: int) -> str:
     """Return an employee's current annual and sick leave balances."""
     with _db() as conn:
@@ -229,16 +210,6 @@ def update_leave_request_status(request_id: int, status: str,
     return _rows_to_json([row])
 
 
-@mcp.tool()
-def get_department_summary() -> str:
-    """Return active employee counts grouped by department."""
-    with _db() as conn:
-        rows = conn.execute(
-            """SELECT department, COUNT(*) AS employee_count
-               FROM employees WHERE status = 'active'
-               GROUP BY department ORDER BY department"""
-        ).fetchall()
-    return _rows_to_json(rows)
 
 
 # ---------------------------------------------------------------------------

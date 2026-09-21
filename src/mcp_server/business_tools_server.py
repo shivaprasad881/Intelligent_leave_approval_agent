@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime, timezone
+from datetime import datetime, timedelta
 
 from mcp.server.fastmcp import FastMCP
 
@@ -101,79 +102,224 @@ def list_employee_leave_requests(employee_id: str, limit: int = 10) -> str:
     return _rows_to_json(rows) if rows else "NOT_FOUND: no leave requests."
 
 
-@mcp.tool()
-def create_leave_request(employee_id: str, leave_type: str, start_date: str,
-                         end_date: str, days: float, reason: str = "") -> str:
-    """Create a pending annual or sick leave request for an active employee.
+# @mcp.tool()
+# def create_leave_request(employee_id: str, leave_type: str, start_date: str,end_date: str, days: float, reason: str = "") -> str:
+#     """Create a pending annual or sick leave request for an active employee.
 
-    This records the request only. Policy eligibility must be checked using the
-    HR policy document and the employee's leave balance before calling it.
+#     This records the request only. Policy eligibility must be checked using the
+#     HR policy document and the employee's leave balance before calling it.
+#     """
+#     leave_type = leave_type.lower().strip()
+#     if leave_type not in {"annual", "sick"}:
+#         return "ERROR: leave_type must be annual or sick."
+
+    
+#     if days <= 0:
+#         return "ERROR: days must be greater than zero."
+
+
+    
+#     try:
+#         start = datetime.fromisoformat(start_date).date()
+#         end = datetime.fromisoformat(end_date).date()
+#     except ValueError:
+#         return "ERROR: dates must use YYYY-MM-DD format."
+#     if end < start:
+#         return "ERROR: end_date cannot be before start_date."
+
+#     with _db() as conn:
+#         employee = conn.execute(
+#             "SELECT * FROM employees WHERE employee_id = ? AND status = 'active'",
+#             (employee_id,),
+#         ).fetchone()
+#         if not employee:
+#             return "NOT_FOUND: active employee does not exist."
+#         balance_field = (
+#             "annual_leave_balance" if leave_type == "annual"
+#             else "sick_leave_balance"
+#         )
+#         if float(employee[balance_field]) < days:
+#             return (
+#                 f"ERROR: insufficient {leave_type} leave balance; "
+#                 f"available={employee[balance_field]}, requested={days}."
+#             )
+#         duplicate = conn.execute(
+#             """SELECT id FROM leave_requests
+#                WHERE employee_id = ? AND status IN ('pending', 'approved')
+#                  AND start_date <= ? AND end_date >= ?""",
+#             (employee_id, end_date, start_date),
+#         ).fetchone()
+#         if duplicate:
+#             return f"ERROR: overlapping leave request exists (request {duplicate['id']})."
+
+#         now = datetime.now(timezone.utc).isoformat()
+#         cur = conn.execute(
+#             """INSERT INTO leave_requests
+#                (employee_id, leave_type, start_date, end_date, days, reason,
+#                 status, approver_note, created_at)
+#                VALUES (?, ?, ?, ?, ?, ?, 'pending', '', ?)""",
+#             (employee_id, leave_type, start_date, end_date, days, reason, now),
+#         )
+
+#         # we already verified for correct leave types
+#         if(leave_type=="annual"):
+#             conn.execute(
+#                 "UPDATE employees SET annual_leave_balance = annual_leave_balance - ? WHERE employee_id = ?",
+#                 (days, employee_id)
+#             )
+
+#         else:
+#             conn.execute(
+#                 "UPDATE employees SET sick_leave_balance = sick_leave_balance - ? WHERE employee_id = ?",
+#                 (days, employee_id)
+#             )
+            
+
+#         conn.commit()
+#         row = conn.execute(
+#             "SELECT * FROM leave_requests WHERE id = ?", (cur.lastrowid,)
+#         ).fetchone()
+#     return _rows_to_json([row])
+
+
+calender = {
+    "2026-09-01": False,
+    "2026-09-02": False,
+    "2026-09-03": False,
+    "2026-09-04": False,
+    "2026-09-05": False,
+    "2026-09-06": False,
+    "2026-09-07": False,
+    "2026-09-08": False,
+    "2026-09-09": False,
+    "2026-09-10": False,
+    "2026-09-11": False,
+    "2026-09-12": False,
+    "2026-09-13": False,
+    "2026-09-14": False,
+    "2026-09-15": False,
+    "2026-09-16": False,
+    "2026-09-17": False,
+    "2026-09-18": False,
+    "2026-09-19": False,
+    "2026-09-20": False,
+    "2026-09-21": False,
+    "2026-09-22": False,
+    "2026-09-23": False,
+    "2026-09-24": True,
+    "2026-09-25": False,
+    "2026-09-26": False,
+    "2026-09-27": False,
+    "2026-09-28": False,
+    "2026-09-29": False,
+    "2026-09-30": False,
+}
+
+@mcp.tool()
+def create_leave_request(empid: str, start_date: str,end_date: str, noofdays: float, reason: str, leave_type: str) -> str:
+
     """
+        Creates a leave
+        request for the employee after checking for overlapping leave requests
+        and verifying the employee's eligibility. On successful creation, the
+        requested days are deducted from the employee's specific leave balance.
+
+        This records the request only. Policy eligibility must be checked using the
+        HR policy document and the employee's leave balance before calling it.
+    """
+
     leave_type = leave_type.lower().strip()
     if leave_type not in {"annual", "sick"}:
         return "ERROR: leave_type must be annual or sick."
-
     
-    if days <= 0:
+        
+    if noofdays <= 0:
         return "ERROR: days must be greater than zero."
 
 
-    
     try:
-        start = datetime.fromisoformat(start_date).date()
-        end = datetime.fromisoformat(end_date).date()
+        start_date = datetime.fromisoformat(start_date).date()
+        end_date = datetime.fromisoformat(end_date).date()
     except ValueError:
         return "ERROR: dates must use YYYY-MM-DD format."
-    if end < start:
+    if end_date < start_date:
         return "ERROR: end_date cannot be before start_date."
 
+    
+
     with _db() as conn:
+        # check do the employee have any leave requests
+        requests = conn.execute(
+            "SELECT * FROM leave_requests WHERE employee_id = ?", (empid,)
+        ).fetchall()
+
+        # if yes then check their status
+        for req in requests:
+            # if status is pending then reject
+            if req["status"] == "pending":
+                return "ERROR: employee already has a leave request in progress, cannot create another."
+
+        # emp doesn't have an in-progress leave, check eligibility
         employee = conn.execute(
-            "SELECT * FROM employees WHERE employee_id = ? AND status = 'active'",
-            (employee_id,),
+            "SELECT * FROM employees WHERE employee_id = ?", (empid,)
         ).fetchone()
         if not employee:
-            return "NOT_FOUND: active employee does not exist."
-        balance_field = (
-            "annual_leave_balance" if leave_type == "annual"
-            else "sick_leave_balance"
-        )
-        if float(employee[balance_field]) < days:
-            return (
-                f"ERROR: insufficient {leave_type} leave balance; "
-                f"available={employee[balance_field]}, requested={days}."
-            )
-        duplicate = conn.execute(
-            """SELECT id FROM leave_requests
-               WHERE employee_id = ? AND status IN ('pending', 'approved')
-                 AND start_date <= ? AND end_date >= ?""",
-            (employee_id, end_date, start_date),
-        ).fetchone()
-        if duplicate:
-            return f"ERROR: overlapping leave request exists (request {duplicate['id']})."
+            return "NOT_FOUND: employee does not exist."
 
-        now = datetime.now(timezone.utc).isoformat()
+        # based on leave_type fetch the available leaves
+        if leave_type == "annual":
+            available_leaves = float(employee["annual_leave_balance"])
+        else:
+            available_leaves = float(employee["sick_leave_balance"])
+
+        # if available_leaves < requested_leaves then reject
+        if available_leaves < noofdays:
+            return "ERROR: insufficient leave balance."
+
+
+        # now check whether any of these dates are in the blacklist or not 
+
+        current_date = start_date
+        while current_date <= end_date:
+
+            isblacklisted = calender.get(current_date.strftime("%Y-%m-%d"),False)
+
+            if isblacklisted :
+                # hoo this date is blacklisted , reject the request
+                return f"ERROR: {current_date} is blacklisted due to an important company event, leave cannot be requested on this date. Please choose a different date or contact HR."
+
+            
+            current_date += timedelta(days=1)
+
+        # hoo non of the requested dates are in blacklist , grant the leave 
+
+
+
+        
+
+        
+        
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # create the leave request
         cur = conn.execute(
             """INSERT INTO leave_requests
-               (employee_id, leave_type, start_date, end_date, days, reason,
-                status, approver_note, created_at)
+               (employee_id, leave_type, start_date, end_date, days, reason, status, approver_note, created_at)
                VALUES (?, ?, ?, ?, ?, ?, 'pending', '', ?)""",
-            (employee_id, leave_type, start_date, end_date, days, reason, now),
+            (empid, leave_type, start_date, end_date, noofdays, reason, created_at)
         )
 
-        # we already verified for correct leave types
-        if(leave_type=="annual"):
+        # upon successful creation, deduct that noof days from the emp's specific leave balance
+        if leave_type == "annual":
             conn.execute(
                 "UPDATE employees SET annual_leave_balance = annual_leave_balance - ? WHERE employee_id = ?",
-                (days, employee_id)
+                (noofdays, empid)
             )
-
         else:
             conn.execute(
                 "UPDATE employees SET sick_leave_balance = sick_leave_balance - ? WHERE employee_id = ?",
-                (days, employee_id)
+                (noofdays, empid)
             )
-            
 
         conn.commit()
         row = conn.execute(
@@ -182,77 +328,9 @@ def create_leave_request(employee_id: str, leave_type: str, start_date: str,
     return _rows_to_json([row])
 
 
-# @mcp.tool()
-# def update_leave_request_status(request_id: int, status: str,
-#                                 approver_note: str = "") -> str:
-#     """Approve, reject, or withdraw a pending leave request.
-
-#     On approval, the relevant leave balance is reduced atomically.
-#     On withdrawl, the relevant leave balance is increased atomically.
-#     Allowed statuses: approved, rejected, cancelled.
-#     """
-#     status = status.lower().strip()
-#     if status not in {"approved", "rejected", "cancelled"}:
-#         return "ERROR: status must be approved, rejected, or cancelled."
-
-
-#     with _db() as conn:
-#         # fetch leave request by id
-#         request = conn.execute(
-#             "SELECT * FROM leave_requests WHERE id = ?", (request_id,)
-#         ).fetchone()
-
-#         # if not found, reject
-#         if not request:
-#             return "NOT_FOUND: leave request does not exist."
-
-#         # check status must be pending
-#         if request["status"] != "pending":
-#             return f"ERROR: request is already {request['status']}."
-
-#         #make it cancelled
-#         conn.execute("UPDATE leave_requests SET status = 'cancelled' WHERE id = ?",(request_id,))
-
-#         #now update the balance of the usre
-
-#         # extract employee_id, leave_type, days from the record
-#         employee_id = request["employee_id"]
-#         leave_type = request["leave_type"]
-#         days = float(request["days"])
-
-#         # fetch the employee record
-#         employee = conn.execute(
-#             "SELECT * FROM employees WHERE employee_id = ?", (employee_id,)
-#         ).fetchone()
-
-#         # if employee not found
-#         if not employee:
-#             return "NOT_FOUND: employee does not exist."
-
-#         # your logic here
-#         if(leave_type=="annual"):
-#                     conn.execute(
-#                         "UPDATE employees SET annual_leave_balance = annual_leave_balance + ? WHERE employee_id = ?",
-#                         (days, employee_id)
-#                     )
-        
-#         else:
-#                     conn.execute(
-#                         "UPDATE employees SET sick_leave_balance = sick_leave_balance + ? WHERE employee_id = ?",
-#                         (days, employee_id)
-#                     )
-
-
-
-#         conn.commit()
-#         row = conn.execute(
-#             "SELECT * FROM leave_requests WHERE id = ?", (request_id,)
-#         ).fetchone()
-#     return _rows_to_json([row])
-
 
 @mcp.tool()
-def update_days_of_accepted_leave(empid: str, newleavedays: float) -> str:
+def update_days_of_an_accepted_leave(empid: str, newleavedays: float) -> str:
 
     """
         Update the number of days of a pending leave after checking the
@@ -355,6 +433,81 @@ def update_days_of_accepted_leave(empid: str, newleavedays: float) -> str:
         ).fetchone()
     return _rows_to_json([row])
 
+
+
+@mcp.tool()
+def withdraw_a_leave_in_progress(empid: str) -> str:
+    """
+        Withdraws an employee's in-progress leave request.
+        Upon successful withdrawal, the leave days are added back to the
+        employee's available leave balance.
+    """ 
+    with _db() as conn:
+
+        # fetch all leave requests of the user
+        requests = conn.execute(
+            "SELECT * FROM leave_requests WHERE employee_id = ?", (empid,)
+        ).fetchall()
+
+        # if nothing got, reject it
+        if not requests:
+            return "NOT_FOUND: no leave record found for this employee."
+
+        # check for any of them that is pending
+        pending_request = None
+        for req in requests:
+            if req["status"] == "pending":
+                # encountered a pending, stop there itself
+                pending_request = req
+                break
+
+        # if no one is pending, reject it
+        if pending_request is None:
+            return "ERROR: no pending leave request found for this employee."
+
+        # use pending_request from here on
+        request = pending_request
+
+
+
+
+
+
+        # user had a leave in progress, update status to cancelled
+        request_id = request["id"]
+        conn.execute(
+            "UPDATE leave_requests SET status = 'cancelled' WHERE id = ?",
+            (request_id,)
+        )
+
+        # find the leave type and days from that record
+        leave_type = request["leave_type"]
+        days = float(request["days"])
+
+        # access the emp record
+        employee = conn.execute(
+            "SELECT * FROM employees WHERE employee_id = ?", (empid,)
+        ).fetchone()
+        if not employee:
+            return "NOT_FOUND: employee does not exist."
+
+        # increment the emp's that specific leave days by days
+        if leave_type == "annual":
+            conn.execute(
+                "UPDATE employees SET annual_leave_balance = annual_leave_balance + ? WHERE employee_id = ?",
+                (days, empid)
+            )
+        else:
+            conn.execute(
+                "UPDATE employees SET sick_leave_balance = sick_leave_balance + ? WHERE employee_id = ?",
+                (days, empid)
+            )
+
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM leave_requests WHERE id = ?", (request_id,)
+        ).fetchone()
+    return _rows_to_json([row])
 
 # ---------------------------------------------------------------------------
 # MCP resources — read-only reference data clients can subscribe to

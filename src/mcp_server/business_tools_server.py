@@ -215,6 +215,7 @@ calender = {
     "2026-09-30": False,
 }
 
+
 @mcp.tool()
 def create_leave_request(empid: str, start_date: str,end_date: str, noofdays: float, reason: str, leave_type: str) -> str:
 

@@ -133,7 +133,7 @@ def _llm() -> ChatGoogleGenerativeAI:
         )
 
     return ChatGoogleGenerativeAI(
-        model="models/gemini-flash-latest",
+        model="models/gemini-2.5-flash",
         max_output_tokens=settings.max_tokens,
         temperature=settings.temperature,
         google_api_key=settings.google_api_key,
@@ -190,6 +190,9 @@ async def run_turn(agent, message: str, thread_id: str = "default") -> dict:
         for tc in (getattr(m, "tool_calls", None) or [])
     ]
     return {"answer": msgs[-1].content, "tool_trace": trace}
+
+
+
 
 
 # ---------------------------------------------------------------------------

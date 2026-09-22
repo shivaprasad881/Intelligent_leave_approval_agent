@@ -206,7 +206,7 @@ calender = {
     "2026-09-21": False,
     "2026-09-22": False,
     "2026-09-23": False,
-    "2026-09-24": True,
+    "2026-09-24": False,
     "2026-09-25": False,
     "2026-09-26": False,
     "2026-09-27": False,
@@ -305,8 +305,8 @@ def create_leave_request(empid: str, start_date: str,end_date: str, noofdays: fl
         # create the leave request
         cur = conn.execute(
             """INSERT INTO leave_requests
-               (employee_id, leave_type, start_date, end_date, days, reason, status, approver_note, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, 'pending', '', ?)""",
+            (employee_id, leave_type, start_date, end_date, days, reason, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
             (empid, leave_type, start_date, end_date, noofdays, reason, created_at)
         )
 

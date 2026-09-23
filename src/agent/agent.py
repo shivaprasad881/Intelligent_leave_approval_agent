@@ -133,7 +133,7 @@ def _llm() -> ChatGoogleGenerativeAI:
         )
 
     return ChatGoogleGenerativeAI(
-        model="models/gemini-2.5-flash",
+        model="models/gemini-3.8-flash",
         max_output_tokens=settings.max_tokens,
         temperature=settings.temperature,
         google_api_key=settings.google_api_key,

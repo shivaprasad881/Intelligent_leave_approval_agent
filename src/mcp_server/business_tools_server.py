@@ -19,6 +19,8 @@ Run standalone (stdio transport — what the agent spawns):
 """
 from __future__ import annotations
 
+from src.repositories.calendar_repository import CalendarRepository
+
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -29,6 +31,8 @@ from mcp.server.fastmcp import FastMCP
 from src.config import settings
 
 mcp = FastMCP("business-operations")
+
+calendar_repo = CalendarRepository("storage/business.db")
 
 
 def _db() -> sqlite3.Connection:
@@ -277,21 +281,24 @@ def create_leave_request(empid: str, start_date: str,end_date: str, noofdays: fl
         if available_leaves < noofdays:
             return "ERROR: insufficient leave balance."
 
+        
+
 
         # now check whether any of these dates are in the blacklist or not 
 
+        calendar_records = calendar_repo.get_all()
+        calendar_lookup = {rec["date"]: bool(rec["isblacklisted"]) for rec in calendar_records}
+
         current_date = start_date
         while current_date <= end_date:
+            date_str = current_date.strftime("%Y-%m-%d")
 
-            isblacklisted = calender.get(current_date.strftime("%Y-%m-%d"),False)
+            if calendar_lookup.get(date_str, False):
+                return f"ERROR: {date_str} is blacklisted due to an important company event, leave cannot be requested on this date. Please choose a different date or contact HR."
 
-            if isblacklisted :
-                # hoo this date is blacklisted , reject the request
-                return f"ERROR: {current_date} is blacklisted due to an important company event, leave cannot be requested on this date. Please choose a different date or contact HR."
-
-            
             current_date += timedelta(days=1)
 
+    
         # hoo non of the requested dates are in blacklist , grant the leave 
 
 

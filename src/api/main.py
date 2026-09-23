@@ -16,8 +16,13 @@ from pydantic import BaseModel, Field
 
 from src.agent.agent import build_agent, run_turn
 from src.rag.ingest import ingest
-from src.repositories.employee_repo import get_by_id as get_employee
 
+
+from src.repositories.employee_repo import get_by_id as get_employee
+from src.repositories.calendar_repository import CalendarRepository
+
+
+calendar_repo = CalendarRepository("storage/business.db")
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
@@ -37,6 +42,9 @@ class LoginRequest(BaseModel):
     empid: str
     password: str
 
+class ToggleRequest(BaseModel):
+    clicked_date: str
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,10 +58,15 @@ app = FastAPI(title="IntelliDesk — Agentic Business Assistant", lifespan=lifes
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",   # ✅ React (Vite)
+        "http://localhost:8080",   # ✅ Spring Boot / static
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 @app.get("/health")
@@ -123,3 +136,29 @@ async def send_user_request_to_backend(req: UserRequest):
         
 
         return  text
+
+
+@app.get("/get_calender_dates")
+async def get_calender_dates():
+    calender_dates = calendar_repo.get_all()
+    return calender_dates
+
+
+@app.post("/toggle_the_clicked_date")
+async def toggle_the_clicked_date(req: ToggleRequest):
+    clicked_date = req.clicked_date
+
+    date_record = calendar_repo.get_by_date(clicked_date)
+
+    if date_record is None:
+        return {"error": f"No record found for {clicked_date}"}
+
+    new_flag = 0 if date_record["isblacklisted"] else 1
+
+    calendar_repo.update_flag(clicked_date, new_flag)
+
+    
+
+
+    
+    

@@ -15,7 +15,7 @@ class CalendarRepository:
     def get_all(self) -> List[Dict]:
         conn = self._connect()
         try:
-            cur = conn.execute("SELECT date, isblacklisted FROM calendar")
+            cur = conn.execute("SELECT date, isblacklisted, reason FROM calendar")
             return [dict(row) for row in cur.fetchall()]
         finally:
             conn.close()
@@ -25,7 +25,7 @@ class CalendarRepository:
         conn = self._connect()
         try:
             cur = conn.execute(
-                "SELECT date, isblacklisted FROM calendar WHERE date = ?",
+                "SELECT date, isblacklisted, reason FROM calendar WHERE date = ?",
                 (date,)
             )
             row = cur.fetchone()
@@ -33,12 +33,13 @@ class CalendarRepository:
         finally:
             conn.close()
 
-    def update_flag(self, date: str, new_flag: int) -> None:
+    # 3. Update the flag (and reason) for a date
+    def update_flag(self, date: str, new_flag: int, reason: str = "") -> None:
         conn = self._connect()
         try:
             conn.execute(
-                "UPDATE calendar SET isblacklisted = ? WHERE date = ?",
-                (new_flag, date)
+                "UPDATE calendar SET isblacklisted = ?, reason = ? WHERE date = ?",
+                (new_flag, reason, date)
             )
             conn.commit()
         finally:

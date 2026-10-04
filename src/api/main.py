@@ -44,6 +44,7 @@ class LoginRequest(BaseModel):
 
 class ToggleRequest(BaseModel):
     clicked_date: str
+    reason: str = ""
 
 
 @asynccontextmanager
@@ -147,15 +148,23 @@ async def get_calender_dates():
 @app.post("/toggle_the_clicked_date")
 async def toggle_the_clicked_date(req: ToggleRequest):
     clicked_date = req.clicked_date
+    reason = req.reason
 
     date_record = calendar_repo.get_by_date(clicked_date)
+
+    
 
     if date_record is None:
         return {"error": f"No record found for {clicked_date}"}
 
-    new_flag = 0 if date_record["isblacklisted"] else 1
+    current_flag = date_record["isblacklisted"]
 
-    calendar_repo.update_flag(clicked_date, new_flag)
+
+    if(current_flag):
+        calendar_repo.update_flag(clicked_date,0,"")
+    else:
+        calendar_repo.update_flag(clicked_date,1,reason)
+
 
     
 

@@ -1,6 +1,16 @@
-.env
+
+cat > .gitignore << 'EOF'
+# Python
 .venv/
 __pycache__/
 *.pyc
 storage/
 out.txt
+.env
+
+
+# Node
+node_modules/
+dist/
+.env.local
+EOF
